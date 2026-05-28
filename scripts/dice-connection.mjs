@@ -1,7 +1,13 @@
 export default class DiceConnection {
+  /**
+   *
+   * @type {WebSocket | null}
+   * @private
+   */
   _webSocket = null;
   connectedDice = new Map();
   _reconnectInterval = null;
+  _heartbeatInterval = null;
   _rollHandlers = new Map();
   isConnected = false;
 
@@ -45,6 +51,11 @@ export default class DiceConnection {
     clearInterval(this._reconnectInterval);
     this._reconnectInterval = null;
     this.isConnected = true;
+    if(this._heartbeatInterval == null) {
+      this._heartbeatInterval = setInterval(() => {
+        this._sendHeartbeat();
+      }, 15_000);
+    }
   }
 
   /* -------------------------------------------- */
@@ -76,12 +87,12 @@ export default class DiceConnection {
         break;
       case "registered_dice":
         data.dice.forEach((d) => this._updateDie(d));
-        break;  
+        break;
     }
   }
 
   /* -------------------------------------------- */
-  
+
   _notifyRollHandlers(data) {
     for (const handler of this._rollHandlers.values()) {
       handler(data);
@@ -89,7 +100,7 @@ export default class DiceConnection {
   }
 
   /* -------------------------------------------- */
-  
+
   _updateDie(die) {
       const state = this.connectedDice.get(die.id) ?? {};
       this.connectedDice.set(die.id, foundry.utils.mergeObject(state, die));
@@ -102,6 +113,8 @@ export default class DiceConnection {
     this._webSocket.close();
     this._webSocket = null;
     this.isConnected = false;
+    clearInterval(this._heartbeatInterval);
+    this._heartbeatInterval = null;
     this._attemptReconnect();
   }
 
@@ -161,6 +174,14 @@ export default class DiceConnection {
     });
 
     console.debug(`GoDice websocket message sent: ${payload}`);
+
+    this._webSocket.send(payload);
+  }
+
+  _sendHeartbeat() {
+    const payload = JSON.stringify({
+      event: "ping",
+    });
 
     this._webSocket.send(payload);
   }
